@@ -76,11 +76,15 @@ function renderChatList() {
         let preview = '';
         if (chat.lastMessage) {
             const msg = chat.lastMessage.message;
-            if (msg.conversation) preview = msg.conversation;
-            else if (msg.extendedTextMessage?.text) preview = msg.extendedTextMessage.text;
-            else if (msg.imageMessage) preview = '📷 Image';
-            else if (msg.videoMessage) preview = '🎥 Video';
-            else preview = 'Unsupported message';
+            if (msg) {
+                if (msg.conversation) preview = msg.conversation;
+                else if (msg.extendedTextMessage?.text) preview = msg.extendedTextMessage.text;
+                else if (msg.imageMessage) preview = '📷 Image';
+                else if (msg.videoMessage) preview = '🎥 Video';
+                else preview = 'Unsupported message';
+            } else {
+                preview = 'Synced / System Message';
+            }
         }
 
         div.innerHTML = `
@@ -270,6 +274,111 @@ window.loadMedia = function (element, type, url, caption) {
         element.innerHTML = html;
         element.classList.remove('loading');
     }, 500);
+};
+
+window.publishStats = async function () {
+    if (!state.currentChatId) return;
+
+    try {
+        // 1. Get Preview
+        const response = await fetch(`/api/groups/${state.currentChatId}/stats?days=2`);
+        const data = await response.json();
+
+        if (!data.success) {
+            alert('Error fetching stats: ' + (data.error || 'Unknown'));
+            return;
+        }
+
+        const stats = data.stats; // Array of day objects
+        if (!stats || stats.length === 0) {
+            alert('No stats available for the last 2 days.');
+            return;
+        }
+
+        // 2. Format Modal/Alert string
+        const groupName = data.groupName || 'this Group';
+        let msg = `📊 Stats Preview for: ${groupName}\n\n`;
+        stats.forEach(day => {
+            msg += `📅 ${day.date}\n`;
+            day.users.forEach(u => {
+                const c = u.counts;
+                msg += `   • ${u.name}: ${u.points} pts\n`;
+                msg += `     [Msg: ${c.text}, Img: ${c.image}, Vid: ${c.video}, Reac: ${c.reactions}]\n`;
+                if (u.tasks.length > 0) {
+                    msg += `     Tasks:\n`;
+                    u.tasks.forEach(t => {
+                        msg += `     - ${t.replied ? '✅' : '⏳'} ${t.text} (${t.points} pts)\n`;
+                    });
+                }
+            });
+            msg += "\n";
+        });
+        msg += "Click OK to publish to the group.";
+
+        // 3. Confirm
+        if (!confirm(msg)) return;
+
+        // 4. Publish
+        const pubRes = await fetch(`/api/groups/${state.currentChatId}/stats/publish?days=2`, { method: 'POST' });
+        const pubData = await pubRes.json();
+
+        if (pubData.success) {
+            alert('Published successfully!');
+            fetchMessages(state.currentChatId);
+        } else {
+            alert('Publish failed: ' + (pubData.error || pubData.message));
+        }
+    } catch (e) {
+        console.error(e);
+        alert('An error occurred.');
+    }
+};
+
+window.showAdmins = async function () {
+    if (!state.currentChatId) return;
+
+    try {
+        const response = await fetch(`/api/groups/${state.currentChatId}/admins`);
+        const data = await response.json();
+
+        if (data.success) {
+            let msg = "👮‍♂️ Group Admins:\n\n";
+            data.admins.forEach(a => {
+                msg += `• ${a.id.split('@')[0]} (${a.admin})\n`;
+            });
+            alert(msg);
+        } else {
+            alert('Failed to fetch admins: ' + (data.error || 'Unknown error'));
+        }
+    } catch (e) {
+        console.error(e);
+        alert('Error fetching admins.');
+    }
+};
+
+window.showMembers = async function () {
+    if (!state.currentChatId) return;
+
+    try {
+        const response = await fetch(`/api/groups/${state.currentChatId}/members`);
+        const data = await response.json();
+
+        if (data.success) {
+            let msg = `👥 Group Members (${data.count}):\n\n`;
+            data.members.sort((a, b) => (b.admin ? 1 : 0) - (a.admin ? 1 : 0)); // Admins first
+
+            data.members.forEach(m => {
+                const adminTag = m.admin ? ` (${m.admin})` : '';
+                msg += `• ${m.name} [${m.id.split('@')[0]}]${adminTag}\n`;
+            });
+            alert(msg);
+        } else {
+            alert('Failed to fetch members: ' + (data.error || 'Unknown error'));
+        }
+    } catch (e) {
+        console.error(e);
+        alert('Error fetching members.');
+    }
 };
 
 function selectChat(chat) {

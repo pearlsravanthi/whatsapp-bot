@@ -103,6 +103,30 @@ export const makeSimpleInMemoryStore = () => {
                 }
             }
         });
+
+        ev.on('messages.reaction', (reactions) => {
+            logger.info(`Received ${reactions.length} reactions`);
+            for (const { key, reaction } of reactions) {
+                const jid = key.remoteJid;
+                if (!messages[jid]) continue;
+
+                const msg = messages[jid].find(m => m.key.id === key.id);
+                if (msg) {
+                    if (!msg.reactions) msg.reactions = [];
+                    // Simple reaction update: remove previous from this user, add new
+                    const participant = key.participant || (key.fromMe ? 'me' : jid);
+                    msg.reactions = msg.reactions.filter(r => r.participant !== participant);
+
+                    if (reaction.text) {
+                        msg.reactions.push({
+                            text: reaction.text,
+                            participant,
+                            ts: Date.now()
+                        });
+                    }
+                }
+            }
+        });
     };
 
     const loadMessages = async (jid, count) => {

@@ -361,6 +361,26 @@ const downloadMedia = async (msg) => {
     }
 };
 
+const getGroupMetadata = async (groupId) => {
+    try {
+        const socket = getWhatsAppInstance();
+        if (!isConnected) {
+            throw new Error('WhatsApp not connected');
+        }
+
+        // Ensure remoteJid is correct format for groups
+        if (!groupId.includes('@g.us') && !groupId.includes('@')) {
+            groupId = groupId + '@g.us';
+        }
+
+        const metadata = await socket.groupMetadata(groupId);
+        return metadata;
+    } catch (error) {
+        logger.error('Error fetching group metadata:', error);
+        throw error;
+    }
+};
+
 export {
     initWhatsApp,
     getWhatsAppInstance,
@@ -376,5 +396,7 @@ export {
     restartAndResync,
     getChats,
     downloadMedia,
-    getMessage
+    getMessage,
+    getGroupMetadata,
+    store // Export store
 };

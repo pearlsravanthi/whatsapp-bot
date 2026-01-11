@@ -1,0 +1,5 @@
+ 1. empty group fails to load entire video
+ 2. msg shd start with Task prefix and as start of sentence : done
+ 3. whoze the admin/evaluator .. only his replies count towards points
+ 4. stat preview total against Tasks . not against name 
+5. admin cannot post task completions.. 

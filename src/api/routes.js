@@ -32,6 +32,13 @@ router.get('/groups/:groupId/messages', listGroupMessages);
 router.get('/chats/:chatId/messages/:messageId/download', downloadMediaController);
 router.get('/messages/export-csv', getRecentMessagesCSV);
 
+// Stats endpoints
+import { getGroupStats, publishGroupStats, getGroupAdmins, getGroupMembers } from './controllers.js';
+router.get('/groups/:groupId/stats', getGroupStats);
+router.post('/groups/:groupId/stats/publish', publishGroupStats);
+router.get('/groups/:groupId/admins', getGroupAdmins);
+router.get('/groups/:groupId/members', getGroupMembers);
+
 // History management
 router.post('/resync-history', resyncHistory);
 

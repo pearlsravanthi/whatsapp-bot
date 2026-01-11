@@ -1,6 +1,6 @@
-# WhatsApp Channel Bot
+# WhatsApp Bot & Channel Manager
 
-A complete Node.js application for posting messages to WhatsApp Channels using Baileys library.
+A complete Node.js application for managing WhatsApp Channels, Groups, and Chats using the Baileys library. Includes a modern web-based user interface.
 
 ## ⚠️ Warning
 
@@ -8,21 +8,31 @@ This uses an unofficial WhatsApp API. Using this may result in your WhatsApp acc
 
 ## Features
 
-- ✅ Send text messages to WhatsApp Channels
-- ✅ Send images with captions
-- ✅ List all your channels
-- ✅ Get channel metadata
-- ✅ Auto-reconnection handling
-- ✅ Session persistence
-- ✅ RESTful API interface
-- ✅ Environment variable configuration
+- **🖥️ Web Interface**:
+  - Full-featured WhatsApp Web clone
+  - Dark mode UI
+  - Real-time message updates
+  - Rich media support (Images, Videos, Audio, Stickers)
+  - Interactive chat threads with quoted messages and reactions
+
+- **⚡ Core Features**:
+  - ✅ Send text messages to Channels and Chats
+  - ✅ Send images with captions
+  - ✅ List all subscribed Channels and Groups
+  - ✅ Auto-reconnection handling
+  - ✅ Session persistence
+  - ✅ RESTful API interface
+
+- **🛠️ Advanced Tools**:
+  - **History Management**: Unlimited backward history fetching and "Hard Resync" capability
+  - **CSV Export**: Export recent message history for analysis
+  - **Media Caching**: Efficient on-demand media downloading and local caching
 
 ## Prerequisites
 
 - Node.js (v16 or higher)
 - npm or yarn
 - A WhatsApp account (preferably a test number)
-- Admin access to a WhatsApp Channel
 
 ## Installation
 
@@ -30,7 +40,7 @@ This uses an unofficial WhatsApp API. Using this may result in your WhatsApp acc
 
 ```bash
 git clone <your-repo-url>
-cd whatsapp-channel-bot
+cd whatsapp-bot
 ```
 
 ### Step 2: Install Dependencies
@@ -45,7 +55,7 @@ npm install
 cp .env.example .env
 ```
 
-Edit `.env` file:
+Edit `.env` file (optional defaults provided):
 ```
 PORT=3000
 NODE_ENV=development
@@ -57,225 +67,83 @@ NODE_ENV=development
 npm start
 ```
 
-On first run, a QR code will be displayed in the terminal. Scan it with your WhatsApp app:
-1. Open WhatsApp on your phone
-2. Go to Settings → Linked Devices
-3. Tap "Link a Device"
-4. Scan the QR code from the terminal
+## Usage
+
+### 🖥️ Web Interface
+Open your browser and navigate to:
+**http://localhost:3000**
+
+- **Scan QR Code**: If not connected, a QR code will appear in your **terminal**. Scan it with your phone (Linked Devices).
+- **View Chats**: Browse all your DMs and Group chats.
+- **View Media**: Click on media placeholders ("📷 Click to find image") to download and view them.
+- **Resync History**: Use the restart button in the sidebar to purge local data and re-fetch from WhatsApp servers.
+
+### 🔌 API Endpoints
+
+#### Channels & Status
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/status` | Check connection status |
+| `GET` | `/api/channels` | List admin channels |
+| `GET` | `/api/channel/:id` | Get channel metadata |
+
+#### Messaging
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/send` | Send text message (body: `{channelId, message}`) |
+| `POST` | `/api/send-image` | Send image (body: `{channelId, imageUrl, caption}`) |
+
+#### Chats & Groups
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/chats` | List all chat threads (DMs & Groups) |
+| `GET` | `/api/groups` | List participating groups |
+| `GET` | `/api/groups/:id/messages` | Get messages for a specific chat/group |
+| `GET` | `/api/messages/export-csv` | Download CSV of recent messages |
+
+#### Media & System
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/chats/:cid/messages/:mid/download` | Download/Cache media attachment |
+| `POST` | `/api/resync-history` | Purge local store and force full history resync |
 
 ## Project Structure
 
 ```
-whatsapp-channel-bot/
+whatsapp-bot/
+├── public/                # Frontend Web UI (HTML/CSS/JS)
 ├── src/
 │   ├── bot/
-│   │   ├── whatsapp.js       # WhatsApp connection logic
-│   │   └── messageHandler.js  # Message handling
+│   │   ├── whatsapp.js    # Core Baileys Logic
+│   │   └── store.js       # In-memory message store & persistence
 │   ├── api/
-│   │   ├── routes.js          # API routes
-│   │   └── controllers.js     # Request handlers
+│   │   ├── routes.js      # API Routes definition
+│   │   └── controllers.js # Request Handlers
 │   ├── config/
-│   │   └── config.js          # Configuration
 │   └── utils/
-│       └── logger.js          # Logging utility
-├── auth_info/                 # Session data (auto-generated)
-├── .env                       # Environment variables
-├── .gitignore
-├── package.json
-├── index.js                   # Entry point
-└── README.md
-```
-
-## Usage
-
-### Using the API
-
-Once connected, you can use the following endpoints:
-
-#### 1. List Your Channels
-
-```bash
-curl http://localhost:3000/api/channels
-```
-
-Response:
-```json
-{
-  "success": true,
-  "channels": [
-    {
-      "id": "123456789@newsletter",
-      "name": "My Channel",
-      "description": "Channel description",
-      "subscribers": 1234
-    }
-  ]
-}
-```
-
-#### 2. Send Text Message to Channel
-
-```bash
-curl -X POST http://localhost:3000/api/send \
-  -H "Content-Type: application/json" \
-  -d '{
-    "channelId": "123456789@newsletter",
-    "message": "Hello from the bot!"
-  }'
-```
-
-Response:
-```json
-{
-  "success": true,
-  "message": "Message sent successfully"
-}
-```
-
-#### 3. Send Image to Channel
-
-```bash
-curl -X POST http://localhost:3000/api/send-image \
-  -H "Content-Type: application/json" \
-  -d '{
-    "channelId": "123456789@newsletter",
-    "imageUrl": "https://example.com/image.jpg",
-    "caption": "Check out this image!"
-  }'
-```
-
-#### 4. Get Channel Info
-
-```bash
-curl http://localhost:3000/api/channel/123456789@newsletter
-```
-
-### Using the CLI
-
-You can also use the included CLI commands:
-
-```bash
-# List channels
-node src/cli.js list-channels
-
-# Send message
-node src/cli.js send-message --channel "123456789@newsletter" --text "Hello!"
-
-# Send image
-node src/cli.js send-image --channel "123456789@newsletter" --url "https://example.com/image.jpg" --caption "Caption"
-```
-
-## API Reference
-
-### GET /api/status
-Check bot connection status
-
-### GET /api/channels
-List all channels you admin
-
-### GET /api/channel/:channelId
-Get specific channel information
-
-### POST /api/send
-Send text message to channel
-
-Body:
-```json
-{
-  "channelId": "string",
-  "message": "string"
-}
-```
-
-### POST /api/send-image
-Send image to channel
-
-Body:
-```json
-{
-  "channelId": "string",
-  "imageUrl": "string",
-  "caption": "string (optional)"
-}
-```
-
-## Development
-
-### Run in Development Mode
-
-```bash
-npm run dev
-```
-
-### Run Tests
-
-```bash
-npm test
-```
-
-### Linting
-
-```bash
-npm run lint
+├── auth_info/             # Session credentials (do not commit)
+├── baileys_store.json     # Local message database
+└── index.js               # Entry point
 ```
 
 ## Troubleshooting
 
 ### QR Code Not Appearing
-- Make sure terminal supports displaying QR codes
-- Check if port 3000 is not already in use
-- Delete `auth_info` folder and restart
+- Check your terminal output. The QR code renders there.
+- Ensure port 3000 is free.
 
-### Connection Keeps Closing
-- WhatsApp may have detected automation
-- Try using a different phone number
-- Wait a few hours before reconnecting
-- Ensure stable internet connection
+### Media Not Loading
+- Media is downloaded on-demand to save bandwidth. Click the placeholder in the UI.
+- If it fails, the media might be too old or deleted from WhatsApp servers.
 
-### Cannot Send to Channel
-- Verify you are an admin of the channel
-- Check channel ID format: `123456789@newsletter`
-- Ensure bot is connected (check `/api/status`)
-
-### Session Expired
-- Delete `auth_info` folder
-- Restart application
-- Scan QR code again
-
-## Finding Your Channel ID
-
-1. Start the bot and scan QR code
-2. Call `GET /api/channels` endpoint
-3. Look for the `id` field in the response
-4. Channel IDs are in format: `123456789@newsletter`
-
-## Security Notes
-
-- Never commit `auth_info` folder to Git
-- Keep `.env` file private
-- Use HTTPS in production
-- Implement rate limiting for API endpoints
-- Add authentication for production use
-
-## Limitations
-
-- Can only send to channels where you are admin
-- Subject to WhatsApp's rate limits
-- Unofficial API - may break with WhatsApp updates
-- Risk of account ban
-
-## License
-
-MIT
+### Missing History
+- Click the "Resync History" button in the web UI.
+- This will restart the bot, delete local database, and request a fresh history sync from WhatsApp.
 
 ## Disclaimer
 
 This project is for educational purposes only. The authors are not responsible for any misuse or for any accounts that may be banned as a result of using this code.
-
-## Support
-
-For issues and questions, please open an issue on GitHub.
-
-## Contributing
-
-Pull requests are welcome! Please read CONTRIBUTING.md first.
