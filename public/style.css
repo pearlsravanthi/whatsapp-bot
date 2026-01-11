@@ -352,3 +352,171 @@ body {
     font-size: 0.75rem;
     border: 1px solid var(--border-color);
 }
+
+/* Modal Styles */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.modal-content {
+    background: #ffffff;
+    width: 90%;
+    max-width: 600px;
+    max-height: 85vh;
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+    overflow: hidden;
+}
+
+.modal-header {
+    padding: 15px 20px;
+    background: #008069;
+    color: white;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.modal-header h2 {
+    margin: 0;
+    font-size: 1.2rem;
+}
+
+.close-modal {
+    font-size: 24px;
+    cursor: pointer;
+}
+
+.modal-body {
+    padding: 20px;
+    overflow-y: auto;
+    font-family: 'Segoe UI', sans-serif;
+    color: #111b21;
+    /* Explicit black text for white modal */
+}
+
+.modal-footer {
+    padding: 15px 20px;
+    background: #f0f2f5;
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    border-top: 1px solid #e1e4e8;
+}
+
+/* Leaderboard Styles */
+.day-header {
+    font-size: 1.1em;
+    font-weight: bold;
+    color: #008069;
+    margin-bottom: 10px;
+    border-bottom: 2px solid #ddd;
+    padding-bottom: 5px;
+}
+
+.user-card {
+    background: #f9f9f9;
+    border-radius: 8px;
+    padding: 10px;
+    margin-bottom: 10px;
+    border: 1px solid #eee;
+}
+
+.user-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 5px;
+}
+
+.user-name {
+    font-weight: 600;
+    font-size: 1.05em;
+    color: #111b21;
+}
+
+.user-points {
+    background: #dcf8c6;
+    color: #008069;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-weight: bold;
+    font-size: 0.9em;
+}
+
+.stat-pills {
+    display: flex;
+    gap: 5px;
+    font-size: 0.8em;
+    color: #54656f;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+}
+
+.pill {
+    background: #e9edef;
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+.task-list {
+    margin-top: 5px;
+    padding-left: 10px;
+    border-left: 3px solid #008069;
+}
+
+.task-item {
+    font-size: 0.9em;
+    margin-bottom: 4px;
+    color: #3b4a54;
+    display: flex;
+    align-items: baseline;
+}
+
+.task-icon {
+    margin-right: 6px;
+    width: 15px;
+}
+
+.task-status-done {
+    color: #008069;
+}
+
+.task-status-pending {
+    color: #f59e0b;
+}
+
+/* Buttons */
+.btn-cancel,
+.btn-publish {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.btn-cancel {
+    background: #e0e0e0;
+    color: #333;
+}
+
+.btn-publish {
+    background: #008069;
+    color: white;
+}
+
+.btn-publish:hover {
+    background: #006d59;
+}

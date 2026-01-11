@@ -77,6 +77,22 @@
             </div>
         </div>
     </div>
+    <!-- Stats Modal -->
+    <div id="stats-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>🏆 Leaderboard Preview</h2>
+                <span class="close-modal" onclick="closeStats()">×</span>
+            </div>
+            <div id="stats-body" class="modal-body">
+                <!-- Stats Content Injected Here -->
+            </div>
+            <div class="modal-footer">
+                <button class="btn-cancel" onclick="closeStats()">Cancel</button>
+                <button class="btn-publish" onclick="confirmPublish()">🚀 Publish to Group</button>
+            </div>
+        </div>
+    </div>
     <script src="app.js"></script>
 </body>
 

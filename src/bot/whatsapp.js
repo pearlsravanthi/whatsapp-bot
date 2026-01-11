@@ -181,8 +181,9 @@ const sendTextToChannel = async (channelId, text) => {
             throw new Error('WhatsApp not connected');
         }
 
-        // Ensure channel ID has correct format
-        if (!channelId.endsWith('@newsletter')) {
+        // Ensure JID has correct format
+        // Only append @newsletter if it's a raw ID (no suffix)
+        if (!channelId.includes('@')) {
             channelId = channelId + '@newsletter';
         }
 
@@ -190,7 +191,7 @@ const sendTextToChannel = async (channelId, text) => {
             text: text
         });
 
-        logger.info(`Message sent to channel ${channelId}`);
+        logger.info(`Message sent to ${channelId}`);
         return result;
     } catch (error) {
         logger.error('Error sending message:', error);
@@ -207,8 +208,8 @@ const sendImageToChannel = async (channelId, imageUrl, caption = '') => {
             throw new Error('WhatsApp not connected');
         }
 
-        // Ensure channel ID has correct format
-        if (!channelId.endsWith('@newsletter')) {
+        // Ensure JID has correct format
+        if (!channelId.includes('@')) {
             channelId = channelId + '@newsletter';
         }
 
@@ -221,7 +222,7 @@ const sendImageToChannel = async (channelId, imageUrl, caption = '') => {
             caption: caption
         });
 
-        logger.info(`Image sent to channel ${channelId}`);
+        logger.info(`Image sent to ${channelId}`);
         return result;
     } catch (error) {
         logger.error('Error sending image:', error);

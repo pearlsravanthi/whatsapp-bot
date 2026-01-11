@@ -1,4 +1,5 @@
 import {
+    getWhatsAppInstance,
     isWhatsAppConnected,
     getChannels,
     getChannelMetadata,
@@ -507,12 +508,27 @@ const _calculateStats = async (groupId, days = 2) => {
 
     // Pass 1: Activity Counters & Identify Tasks/Points
     for (const msg of messages) {
-        if (msg.key.fromMe) continue; // Skip bot messages unless tracking bot activity? user usually implies members.
+        // if (msg.key.fromMe) continue; // Skip bot messages unless tracking bot activity? user usually implies members.
 
         const ts = (typeof msg.messageTimestamp === 'number' ? msg.messageTimestamp : msg.messageTimestamp.low);
         const dayKey = getDayKey(ts);
-        const senderJid = msg.key.participant || msg.key.remoteJid;
-        const name = msg.pushName || senderJid.split('@')[0];
+
+        // Resolve JID for self (Unify with Pass 3 logic)
+        let senderJid = msg.key.participant || msg.key.remoteJid;
+        if (msg.key.fromMe) {
+            const socket = getWhatsAppInstance();
+            senderJid = socket?.user?.id || senderJid;
+        }
+
+        // Ensure domain
+        if (!senderJid.includes('@')) senderJid = senderJid + '@s.whatsapp.net';
+
+        // Normalize: remove device part
+        const userPart = senderJid.split('@')[0].split(':')[0];
+        const server = senderJid.split('@')[1] || 's.whatsapp.net';
+        senderJid = `${userPart}@${server}`;
+
+        const name = msg.pushName || (msg.key.fromMe ? 'Me' : userPart);
 
         const node = getStatNode(dayKey, senderJid, name);
 
@@ -580,10 +596,11 @@ const _calculateStats = async (groupId, days = 2) => {
     } catch (e) {
         logger.warn('Failed to fetch group metadata for admin check, proceeding without admin restrictions:', e);
     }
+    // 3a. Find all Tasks first
 
     // 3a. Find all Tasks first
     for (const msg of messages) {
-        if (msg.key.fromMe) continue;
+        // if (msg.key.fromMe) continue; // Allow self-messages
 
         const m = msg.message;
         let isTask = false;
@@ -606,8 +623,24 @@ const _calculateStats = async (groupId, days = 2) => {
             logger.info(`[Stats] Found Task: ${content.substring(0, 20)}... from ${msg.pushName}`);
             const ts = (typeof msg.messageTimestamp === 'number' ? msg.messageTimestamp : msg.messageTimestamp.low);
             const day = getDayKey(ts);
-            const jid = msg.key.participant || msg.key.remoteJid;
-            const name = msg.pushName || jid.split('@')[0];
+
+            // Resolve JID for self
+            let jid = msg.key.participant || msg.key.remoteJid;
+            if (msg.key.fromMe) {
+                const socket = getWhatsAppInstance();
+                jid = socket?.user?.id || jid;
+            }
+
+            // Should contain @s.whatsapp.net usually, but just in case
+            if (!jid.includes('@')) jid = jid + '@s.whatsapp.net';
+
+            // Normalize JID: remove device part (user:dev@server -> user@server)
+            const rawJid = jid;
+            const userPart = rawJid.split('@')[0].split(':')[0];
+            const server = rawJid.split('@')[1] || 's.whatsapp.net';
+            jid = `${userPart}@${server}`;
+
+            const name = msg.pushName || (msg.key.fromMe ? 'Me' : userPart);
 
             const node = getStatNode(day, jid, name);
 
@@ -634,11 +667,10 @@ const _calculateStats = async (groupId, days = 2) => {
                 if (me) senderJid = me.id;
             } catch (e) { }
         }
-        // Fallback for non-group? But we are in group stats.
+        // Fallback for non-group
         if (!senderJid) senderJid = msg.key.remoteJid;
 
         const senderId = senderJid ? senderJid.split('@')[0].split(':')[0] : '';
-
         let isAdmin = admins.has(senderId);
 
         const text = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
@@ -654,22 +686,44 @@ const _calculateStats = async (groupId, days = 2) => {
                 if (!isAdmin) continue; // Only check admin if points are valid format
                 const context = msg.message?.extendedTextMessage?.contextInfo;
                 if (context && context.quotedMessage) {
-                    const targetJid = context.participant;
+                    let targetJid = context.participant;
+
+                    // Normalize Target JID
+                    const targetUser = targetJid.split('@')[0].split(':')[0];
+                    const targetServer = targetJid.split('@')[1] || 's.whatsapp.net';
+                    targetJid = `${targetUser}@${targetServer}`;
+
                     const stanzaId = context.stanzaId; // Valid task ID if it was in our window
 
                     // Search for the task across all days in our window
                     let taskFound = false;
                     for (const date in dailyStats) {
+                        // Strategy 1: Direct Lookup (Fastest)
                         if (dailyStats[date][targetJid]) {
                             const t = dailyStats[date][targetJid].tasks.find(t => t.id === stanzaId);
                             if (t) {
-                                t.points = points; // Overwrite with latest valid admin reply
+                                t.points = points;
                                 t.replied = true;
-                                // Recalculation happens in Pass 4
                                 taskFound = true;
                                 break;
                             }
                         }
+
+                        // Strategy 2: Fallback Scan by ID (Handles JID mismatches like LID vs PN)
+                        if (!taskFound) {
+                            const users = Object.values(dailyStats[date]);
+                            for (const userNode of users) {
+                                const t = userNode.tasks.find(t => t.id === stanzaId);
+                                if (t) {
+                                    t.points = points;
+                                    t.replied = true;
+                                    taskFound = true;
+                                    break;
+                                }
+                            }
+                        }
+
+                        if (taskFound) break;
                     }
                 }
             }
@@ -799,19 +853,32 @@ const getGroupMembers = async (req, res) => {
         const { groupId } = req.params;
         const meta = await getGroupMetadata(groupId);
 
+        const socket = getWhatsAppInstance();
+        // socket.user usually { id: "123:4@s.whatsapp.net", name: "Me" }
+        const myJid = socket?.user?.id;
+
         const contactCount = Object.keys(store.contacts).length;
         logger.info(`[Members] Store has ${contactCount} contacts.`);
 
         const members = meta.participants.map(p => {
-            const contact = store.contacts[p.id] || {};
-            // logger.info(`[Members] Lookup ${p.id} -> Found: ${!!store.contacts[p.id]} Name: ${contact.name} Notify: ${contact.notify}`);
+            // Normalize JID: user:device@server -> user@server
+            const userPart = p.id.split('@')[0].split(':')[0];
+            const server = p.id.split('@')[1] || 's.whatsapp.net';
+            const normalizedJid = `${userPart}@${server}`;
+
+            const contact = (store.contacts && (store.contacts[normalizedJid] || store.contacts[p.id])) || {};
 
             let name = contact.name || contact.notify || contact.verifiedName;
-            if (!name && p.id === store.user?.id) name = "Me"; // Handle self case if missing
+
+            // Handle Self
+            if (!name && myJid) {
+                const myUserPart = myJid.split('@')[0].split(':')[0];
+                if (userPart === myUserPart) name = socket.user?.name || "Me";
+            }
 
             return {
                 id: p.id,
-                name: name || p.id.split('@')[0], // Fallback to ID
+                name: name || userPart,
                 admin: p.admin || null
             };
         });

@@ -280,7 +280,6 @@ window.publishStats = async function () {
     if (!state.currentChatId) return;
 
     try {
-        // 1. Get Preview
         const response = await fetch(`/api/groups/${state.currentChatId}/stats?days=2`);
         const data = await response.json();
 
@@ -289,48 +288,81 @@ window.publishStats = async function () {
             return;
         }
 
-        const stats = data.stats; // Array of day objects
+        const stats = data.stats;
         if (!stats || stats.length === 0) {
             alert('No stats available for the last 2 days.');
             return;
         }
 
-        // 2. Format Modal/Alert string
-        const groupName = data.groupName || 'this Group';
-        let msg = `📊 Stats Preview for: ${groupName}\n\n`;
+        // Render Leaderboard in Modal
+        const statsBody = document.getElementById('stats-body');
+        let html = '';
+
         stats.forEach(day => {
-            msg += `📅 ${day.date}\n`;
+            html += `<div class="day-header">📅 ${day.date}</div>`;
             day.users.forEach(u => {
-                const c = u.counts;
-                msg += `   • ${u.name}: ${u.points} pts\n`;
-                msg += `     [Msg: ${c.text}, Img: ${c.image}, Vid: ${c.video}, Reac: ${c.reactions}]\n`;
+                html += `
+                    <div class="user-card">
+                        <div class="user-header">
+                            <span class="user-name">${u.name}</span>
+                            <span class="user-points">${u.points} pts</span>
+                        </div>
+                        <div class="stat-pills">
+                            <span class="pill">💬 ${u.counts.text}</span>
+                            <span class="pill">🖼️ ${u.counts.image}</span>
+                            <span class="pill">🎥 ${u.counts.video}</span>
+                            <span class="pill">❤️ ${u.counts.reactions}</span>
+                            <span class="pill">↪️ ${u.counts.replies}</span>
+                        </div>
+                `;
+
                 if (u.tasks.length > 0) {
-                    msg += `     Tasks:\n`;
+                    html += `<div class="task-list">`;
                     u.tasks.forEach(t => {
-                        msg += `     - ${t.replied ? '✅' : '⏳'} ${t.text} (${t.points} pts)\n`;
+                        const statusClass = t.replied ? 'task-status-done' : 'task-status-pending';
+                        const icon = t.replied ? '✅' : '⏳';
+                        html += `
+                            <div class="task-item">
+                                <span class="task-icon ${statusClass}">${icon}</span>
+                                <span>${t.text} (${t.points} pts)</span>
+                            </div>
+                        `;
                     });
+                    html += `</div>`;
                 }
+                html += `</div>`; // Close user-card
             });
-            msg += "\n";
         });
-        msg += "Click OK to publish to the group.";
 
-        // 3. Confirm
-        if (!confirm(msg)) return;
+        statsBody.innerHTML = html;
+        document.getElementById('stats-modal').style.display = 'flex';
+    } catch (e) {
+        console.error(e);
+        alert('An error occurred while fetching stats.');
+    }
+};
 
-        // 4. Publish
+window.closeStats = function () {
+    document.getElementById('stats-modal').style.display = 'none';
+};
+
+window.confirmPublish = async function () {
+    if (!state.currentChatId) return;
+
+    try {
         const pubRes = await fetch(`/api/groups/${state.currentChatId}/stats/publish?days=2`, { method: 'POST' });
         const pubData = await pubRes.json();
 
         if (pubData.success) {
-            alert('Published successfully!');
+            alert('🚀 Stats published successfully to the group!');
+            closeStats();
             fetchMessages(state.currentChatId);
         } else {
             alert('Publish failed: ' + (pubData.error || pubData.message));
         }
     } catch (e) {
         console.error(e);
-        alert('An error occurred.');
+        alert('An error occurred while publishing stats.');
     }
 };
 
