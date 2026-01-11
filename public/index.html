@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WhatsApp Bot Web</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Segoe+UI:wght@400;600&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="header">
+                <div class="user-avatar">
+                    <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23ccc'%3E%3Cpath d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z'/%3E%3C/svg%3E"
+                        alt="Me">
+                </div>
+                <div class="header-icons">
+                    <button id="resync-btn" title="Resync History">↻</button>
+                    <button title="Status">○</button>
+                    <button title="New Chat">+</button>
+                    <button title="Menu">⋮</button>
+                </div>
+            </div>
+            <div class="search-bar">
+                <div class="search-input">
+                    <input type="text" placeholder="Search or start new chat" id="chat-search">
+                </div>
+            </div>
+            <div class="chat-list" id="chat-list">
+                <!-- Chats will be loaded here -->
+                <div class="chat-item loading">Loading chats...</div>
+            </div>
+        </div>
+
+        <!-- Main Chat Area -->
+        <div class="main-chat">
+            <div class="chat-header" id="main-header" style="display: none;">
+                <div class="chat-avatar">
+                    <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23ccc'%3E%3Cpath d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z'/%3E%3C/svg%3E"
+                        alt="Avatar" id="header-avatar">
+                </div>
+                <div class="chat-info">
+                    <h3 id="header-name">Select a chat</h3>
+                    <span id="header-status"></span>
+                </div>
+                <div class="header-icons">
+                    <button>🔍</button>
+                    <button>⋮</button>
+                </div>
+            </div>
+
+            <div class="chat-area-placeholder" id="placeholder">
+                <div class="placeholder-content">
+                    <h1>WhatsApp Web Bot</h1>
+                    <p>Send and receive messages without keeping your phone online.</p>
+                </div>
+            </div>
+
+            <div class="messages-container" id="messages-container" style="display: none;">
+                <!-- Messages will be loaded here -->
+            </div>
+
+            <div class="input-area" id="input-area" style="display: none;">
+                <button class="icon-btn">😊</button>
+                <button class="icon-btn">📎</button>
+                <div class="message-input">
+                    <input type="text" placeholder="Type a message" id="message-input">
+                </div>
+                <button class="icon-btn" id="send-btn">➤</button>
+            </div>
+        </div>
+    </div>
+    <script src="app.js"></script>
+</body>
+
+</html>
