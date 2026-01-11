@@ -229,7 +229,7 @@ const listGroupMessages = async (req, res) => {
         }
 
         const { groupId } = req.params;
-        const limit = parseInt(req.query.limit) || 50;
+        const limit = parseInt(req.query.limit) || 400;
 
         if (!groupId) {
             return res.status(400).json({

@@ -24,7 +24,7 @@ async function fetchMessages(chatId) {
         // Use group endpoint which calls getGroupsMessages -> store.loadMessages which handles all JIDs
         // Note: endpoint is /api/groups/:groupId/messages, but internally it handles any JID essentially if store has it
         // Ideally we should rename the route to /api/chats/:chatId/messages in backend, but let's use what we have or add query
-        const response = await fetch(`/api/groups/${chatId}/messages?limit=50`);
+        const response = await fetch(`/api/groups/${chatId}/messages?limit=400`);
         const data = await response.json();
         if (data.success) {
             renderMessages(data.messages);
@@ -107,8 +107,9 @@ function renderChatList() {
 
 function renderMessages(messages) {
     const container = document.getElementById('messages-container');
-    // Keep track of scroll position to decide if we should auto-scroll
-    const shouldScroll = container.scrollTop + container.clientHeight >= container.scrollHeight - 50;
+
+    // Check if we were at the bottom before re-rendering
+    const isAtBottom = container.scrollTop + container.clientHeight >= container.scrollHeight - 50;
 
     const getTimestamp = (t) => {
         if (!t) return 0;
@@ -121,14 +122,12 @@ function renderMessages(messages) {
     // Sort messages locally
     messages.sort((a, b) => getTimestamp(a.messageTimestamp) - getTimestamp(b.messageTimestamp));
 
+    // We clear and re-render the whole batch to ensure perfect chronological order in the DOM
+    container.innerHTML = '';
+
     messages.forEach(msg => {
-        const msgId = `msg-${msg.key.id}`;
-        let div = document.getElementById(msgId);
-
-        if (div) return;
-
-        div = document.createElement('div');
-        div.id = msgId;
+        const div = document.createElement('div');
+        div.id = `msg-${msg.key.id}`;
         const fromMe = msg.key.fromMe;
         div.className = `message ${fromMe ? 'outgoing' : 'incoming'}`;
 
@@ -198,33 +197,40 @@ function renderMessages(messages) {
             if (m.conversation) content = m.conversation;
             else if (m.extendedTextMessage?.text) content = m.extendedTextMessage.text;
 
-            // Media - Auto-rendering for "play in thread"
+            // Media - On-demand loading with Thumbnails
             if (m.imageMessage) {
                 const url = getUrl();
+                const caption = m.imageMessage.caption ? m.imageMessage.caption.replace(/'/g, "\\'") : '';
+                const thumb = m.imageMessage.jpegThumbnail ? `data:image/jpeg;base64,${m.imageMessage.jpegThumbnail.toString('base64')}` : null;
                 content = `
-                    <div class="media-container">
-                        <img src="${url}" class="loaded-media" onclick="window.open('${url}', '_blank')" loading="lazy">
+                    <div class="media-container placeholder ${thumb ? 'has-thumb' : ''}" onclick="loadMedia(this, 'image', '${url}', '${caption}')">
+                        ${thumb ? `<img src="${thumb}" class="media-thumbnail">` : '<span style="font-size: 1.5rem;">📷</span>'}
+                        <span>${thumb ? 'Show Full Image' : 'Click to load Image'}</span>
                         <div class="caption">${m.imageMessage.caption || ''}</div>
                     </div>`;
             }
             else if (m.videoMessage) {
                 const url = getUrl();
+                const caption = m.videoMessage.caption ? m.videoMessage.caption.replace(/'/g, "\\'") : '';
+                const thumb = m.videoMessage.jpegThumbnail ? `data:image/jpeg;base64,${m.videoMessage.jpegThumbnail.toString('base64')}` : null;
                 content = `
-                    <div class="media-container">
-                        <video src="${url}" controls class="loaded-media" preload="metadata"></video>
+                    <div class="media-container placeholder ${thumb ? 'has-thumb' : ''}" onclick="loadMedia(this, 'video', '${url}', '${caption}')">
+                        ${thumb ? `<div style="position:relative;"><img src="${thumb}" class="media-thumbnail"><div class="play-overlay">▶</div></div>` : '<span style="font-size: 1.5rem;">🎥</span>'}
+                        <span>${thumb ? 'Play Video' : 'Click to load Video'}</span>
                         <div class="caption">${m.videoMessage.caption || ''}</div>
                     </div>`;
             }
             else if (m.audioMessage) {
                 content = `
-                    <div class="media-container">
-                        <audio src="${getUrl()}" controls preload="metadata"></audio>
+                    <div class="media-container placeholder" onclick="loadMedia(this, 'audio', '${getUrl()}')">
+                        <span style="font-size: 1.5rem;">🎵</span>
+                        <span>Click to load Audio</span>
                     </div>`;
             }
             else if (m.stickerMessage) {
                 content = `
-                    <div class="media-container">
-                        <img src="${getUrl()}" class="loaded-media" style="width:120px; height: auto;">
+                    <div class="media-container placeholder" onclick="loadMedia(this, 'sticker', '${getUrl()}')">
+                        <span>💟 Click to load Sticker</span>
                     </div>`;
             }
 
@@ -275,11 +281,42 @@ function renderMessages(messages) {
         container.appendChild(div);
     });
 
-    // Initial scroll on first load or if user was at bottom
-    if (shouldScroll) {
+    // Auto-scroll logic
+    if (isAtBottom) {
         scrollToBottom();
     }
 }
+
+window.loadMedia = function (element, type, url, caption) {
+    element.onclick = null; // Remove handler
+    element.classList.remove('placeholder');
+    element.classList.remove('has-thumb');
+    element.classList.add('loading');
+
+    // Keep caption if it exists
+    const captionDiv = element.querySelector('.caption')?.outerHTML || '';
+    element.innerHTML = '<span>⏳ Downloading...</span>' + (captionDiv && type !== 'image' && type !== 'video' ? captionDiv : '');
+
+    // Create actual media element
+    let html = '';
+    if (type === 'image') {
+        html = `<img src="${url}" alt="Image" class="loaded-media" onclick="window.open('${url}', '_blank')">`;
+        if (caption && caption !== 'undefined' && caption !== '') html += `<div class="caption">${caption}</div>`;
+    } else if (type === 'video') {
+        html = `<video src="${url}" controls autoplay class="loaded-media"></video>`;
+        if (caption && caption !== 'undefined' && caption !== '') html += `<div class="caption">${caption}</div>`;
+    } else if (type === 'audio') {
+        html = `<audio src="${url}" controls autoplay></audio>`;
+    } else if (type === 'sticker') {
+        html = `<img src="${url}" alt="Sticker" style="width:100px;">`;
+    }
+
+    // Small delay to allow 'loading' text to be seen or just swap
+    setTimeout(() => {
+        element.innerHTML = html;
+        element.classList.remove('loading');
+    }, 500);
+};
 
 // Helper to determine fetch range and filtering for stats
 function getStatsConfig() {
