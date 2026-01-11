@@ -129,13 +129,19 @@ export const makeSimpleInMemoryStore = () => {
         });
     };
 
+    const getTimestamp = (t) => {
+        if (!t) return 0;
+        if (typeof t === 'number') return t;
+        if (typeof t === 'string') return parseInt(t);
+        if (typeof t === 'object' && t.low !== undefined) return t.low;
+        return Number(t) || 0;
+    };
+
     const loadMessages = async (jid, count) => {
         const msgs = messages[jid] || [];
-        // Sort by timestamp if available (most recent last)
-        const sorted = msgs.sort((a, b) => {
-            const t1 = (a.messageTimestamp || 0);
-            const t2 = (b.messageTimestamp || 0);
-            return (typeof t1 === 'number' ? t1 : t1.low) - (typeof t2 === 'number' ? t2 : t2.low);
+        // Sort by timestamp (most recent last)
+        const sorted = [...msgs].sort((a, b) => {
+            return getTimestamp(a.messageTimestamp) - getTimestamp(b.messageTimestamp);
         });
 
         // Return correct number of messages (most recent)
@@ -145,14 +151,9 @@ export const makeSimpleInMemoryStore = () => {
     const loadMessagesSince = async (jid, timestamp) => {
         const msgs = messages[jid] || [];
         return msgs.filter(m => {
-            const t = (m.messageTimestamp || 0);
-            // messageTimestamp can be Long or number. Safe convert.
-            const msgTime = typeof t === 'number' ? t : t.low || t;
-            return msgTime >= timestamp;
+            return getTimestamp(m.messageTimestamp) >= timestamp;
         }).sort((a, b) => {
-            const t1 = (a.messageTimestamp || 0);
-            const t2 = (b.messageTimestamp || 0);
-            return (typeof t1 === 'number' ? t1 : t1.low) - (typeof t2 === 'number' ? t2 : t2.low);
+            return getTimestamp(a.messageTimestamp) - getTimestamp(b.messageTimestamp);
         });
     };
 
@@ -183,7 +184,7 @@ export const makeSimpleInMemoryStore = () => {
             }
 
             if (lastMsg) {
-                const timestamp = lastMsg.messageTimestamp && (typeof lastMsg.messageTimestamp === 'number' ? lastMsg.messageTimestamp : lastMsg.messageTimestamp.low);
+                const timestamp = getTimestamp(lastMsg.messageTimestamp);
 
                 summary.push({
                     id: jid,

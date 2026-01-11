@@ -476,7 +476,7 @@ const downloadMediaController = async (req, res) => {
     }
 };
 
-const _calculateStats = async (groupId, days = 2) => {
+const _calculateStats = async (groupId, days = 2, aggregate = false) => {
     // Lookback range
     const startTime = Math.floor(Date.now() / 1000) - (days * 24 * 60 * 60);
     const messages = await getMessagesSince(groupId, startTime);
@@ -489,47 +489,59 @@ const _calculateStats = async (groupId, days = 2) => {
     }
 
     const getDayKey = (ts) => {
+        if (aggregate) {
+            if (days === 1) return 'Today';
+            if (days === 7) return 'Last 7 Days';
+            return `Last ${days} Days`;
+        }
         const d = new Date(ts * 1000);
         return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
     };
 
     const getStatNode = (day, jid, name) => {
         if (!dailyStats[day]) dailyStats[day] = {};
-        if (!dailyStats[day][jid]) {
-            dailyStats[day][jid] = {
+        // Composite Key: JID + Name (Bug 6: support separate profiles for same phone number)
+        const profileKey = `${jid}_${name || ''}`;
+        if (!dailyStats[day][profileKey]) {
+            dailyStats[day][profileKey] = {
                 name: name || 'Unknown',
                 points: 0,
                 tasks: [],
                 counts: { text: 0, image: 0, video: 0, reactions: 0, replies: 0 }
             };
         }
-        return dailyStats[day][jid];
+        return dailyStats[day][profileKey];
+    };
+
+    const getTimestamp = (t) => {
+        if (!t) return 0;
+        if (typeof t === 'number') return t;
+        if (typeof t === 'string') return parseInt(t);
+        if (typeof t === 'object' && t.low !== undefined) return t.low;
+        return Number(t) || 0;
     };
 
     // Pass 1: Activity Counters & Identify Tasks/Points
     for (const msg of messages) {
         // if (msg.key.fromMe) continue; // Skip bot messages unless tracking bot activity? user usually implies members.
 
-        const ts = (typeof msg.messageTimestamp === 'number' ? msg.messageTimestamp : msg.messageTimestamp.low);
+        const ts = getTimestamp(msg.messageTimestamp);
         const dayKey = getDayKey(ts);
 
-        // Resolve JID for self (Unify with Pass 3 logic)
+        // Resolve JID for self
         let senderJid = msg.key.participant || msg.key.remoteJid;
         if (msg.key.fromMe) {
             const socket = getWhatsAppInstance();
             senderJid = socket?.user?.id || senderJid;
         }
 
-        // Ensure domain
+        // Ensure domain and normalize
         if (!senderJid.includes('@')) senderJid = senderJid + '@s.whatsapp.net';
-
-        // Normalize: remove device part
         const userPart = senderJid.split('@')[0].split(':')[0];
         const server = senderJid.split('@')[1] || 's.whatsapp.net';
         senderJid = `${userPart}@${server}`;
 
         const name = msg.pushName || (msg.key.fromMe ? 'Me' : userPart);
-
         const node = getStatNode(dayKey, senderJid, name);
 
         // Count Message Types
@@ -545,15 +557,6 @@ const _calculateStats = async (groupId, days = 2) => {
                 node.counts.replies++;
             }
         }
-
-        // Count Reactions Received (This logic is tricky with store structure. 
-        // If msg has reactions, those are reactions *on* this message, so they are points FOR this sender effectively? 
-        // Or user wants "reactions made"? Reactions made is hard to track unless we have reaction events separate from messages.
-        // Usually `messages` in Baileys store contains the current state of reactions ON the message. 
-        // We cannot easily track WHO made the reaction unless we scan all reactions on all messages for this user's JID.
-        // Let's count *reactions received* on their messages for now as "reactions" stat? 
-        // Or if user meant "reactions performed by sender", we need to scan EVERY message's reaction list.
-        // Let's try scanning all messages for reactions BY this user.)
     }
 
     // Pass 2: Scan for Reactions Performed by users (iterate all msgs again or integrate?)
@@ -569,7 +572,9 @@ const _calculateStats = async (groupId, days = 2) => {
                 const reactor = r.key?.participant || r.key?.remoteJid;
                 if (reactor) {
                     const reactionDay = getDayKey(r.timestamp || Date.now() / 1000); // timestamp might be missing
-                    const rNode = getStatNode(reactionDay, reactor, 'Unknown');
+                    // For reactions, we don't have the reactor's pushName easily here unless cached
+                    // We'll use the reactor's JID as the name fallback
+                    const rNode = getStatNode(reactionDay, reactor, reactor.split('@')[0]);
                     rNode.counts.reactions++;
                 }
             });
@@ -594,7 +599,7 @@ const _calculateStats = async (groupId, days = 2) => {
         }
         logger.info(`[Stats] Found ${admins.size} admins in group: ${Array.from(admins).join(', ')}`);
     } catch (e) {
-        logger.warn('Failed to fetch group metadata for admin check, proceeding without admin restrictions:', e);
+        logger.warn('Failed to fetch group metadata for admin check:', e);
     }
     // 3a. Find all Tasks first
 
@@ -620,37 +625,34 @@ const _calculateStats = async (groupId, days = 2) => {
         }
 
         if (isTask) {
-            logger.info(`[Stats] Found Task: ${content.substring(0, 20)}... from ${msg.pushName}`);
-            const ts = (typeof msg.messageTimestamp === 'number' ? msg.messageTimestamp : msg.messageTimestamp.low);
-            const day = getDayKey(ts);
-
-            // Resolve JID for self
+            // Resolve JID and Name
             let jid = msg.key.participant || msg.key.remoteJid;
             if (msg.key.fromMe) {
                 const socket = getWhatsAppInstance();
                 jid = socket?.user?.id || jid;
             }
-
-            // Should contain @s.whatsapp.net usually, but just in case
             if (!jid.includes('@')) jid = jid + '@s.whatsapp.net';
-
-            // Normalize JID: remove device part (user:dev@server -> user@server)
-            const rawJid = jid;
-            const userPart = rawJid.split('@')[0].split(':')[0];
-            const server = rawJid.split('@')[1] || 's.whatsapp.net';
+            const userPart = jid.split('@')[0].split(':')[0];
+            const server = jid.split('@')[1] || 's.whatsapp.net';
             jid = `${userPart}@${server}`;
 
+            // Bug 5: Admin cannot post task completions
+            if (admins.has(userPart)) {
+                logger.debug(`[Stats] Skipping task from admin: ${userPart}`);
+                continue;
+            }
+
             const name = msg.pushName || (msg.key.fromMe ? 'Me' : userPart);
+            const ts = getTimestamp(msg.messageTimestamp);
+            const day = getDayKey(ts);
 
             const node = getStatNode(day, jid, name);
-
-            // Add to tasks list (initially 0 points, means unreplied/unscored)
             if (!node.tasks.find(t => t.id === msg.key.id)) {
                 node.tasks.push({
                     id: msg.key.id,
                     text: content.substring(0, 40) + (content.length > 40 ? '...' : ''),
                     points: 0,
-                    replied: false // Track if it got a point reply
+                    replied: false
                 });
             }
         }
@@ -753,6 +755,7 @@ const getGroupStats = async (req, res) => {
     try {
         const { groupId } = req.params;
         const days = parseInt(req.query.days) || 1;
+        const filter = req.query.filter;
 
         // Fetch group Name
         let groupName = 'Unknown Group';
@@ -763,7 +766,15 @@ const getGroupStats = async (req, res) => {
             logger.warn('Could not fetch group name for stats', e);
         }
 
-        const summary = await _calculateStats(groupId, days);
+        const isYesterday = filter === 'yesterday';
+        const aggregate = !isYesterday && (req.query.aggregate === 'true' || days > 1);
+        let summary = await _calculateStats(groupId, days, aggregate);
+
+        if (isYesterday) {
+            const todayStr = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+            summary = summary.filter(s => s.date !== todayStr);
+            if (summary.length > 0) summary = [summary[0]];
+        }
 
         res.json({
             success: true,
@@ -782,8 +793,16 @@ const publishGroupStats = async (req, res) => {
     try {
         const { groupId } = req.params;
         const days = parseInt(req.query.days) || 1;
+        const isYesterday = filter === 'yesterday';
+        const aggregate = !isYesterday && (req.query.aggregate === 'true' || days > 1);
 
-        const summary = await _calculateStats(groupId, days);
+        let summary = await _calculateStats(groupId, days, aggregate);
+
+        if (isYesterday) {
+            const todayStr = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+            summary = summary.filter(s => s.date !== todayStr);
+            if (summary.length > 0) summary = [summary[0]];
+        }
 
         if (summary.length === 0) {
             return res.json({ success: true, message: 'No stats to publish.' });

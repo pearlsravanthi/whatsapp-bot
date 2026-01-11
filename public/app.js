@@ -110,25 +110,22 @@ function renderMessages(messages) {
     // Keep track of scroll position to decide if we should auto-scroll
     const shouldScroll = container.scrollTop + container.clientHeight >= container.scrollHeight - 50;
 
-    // Sort messages locally just in case
-    messages.sort((a, b) => {
-        const t1 = a.messageTimestamp && (typeof a.messageTimestamp === 'number' ? a.messageTimestamp : a.messageTimestamp.low);
-        const t2 = b.messageTimestamp && (typeof b.messageTimestamp === 'number' ? b.messageTimestamp : b.messageTimestamp.low);
-        return t1 - t2;
-    });
+    const getTimestamp = (t) => {
+        if (!t) return 0;
+        if (typeof t === 'number') return t;
+        if (typeof t === 'string') return parseInt(t);
+        if (typeof t === 'object' && t.low !== undefined) return t.low;
+        return Number(t) || 0;
+    };
+
+    // Sort messages locally
+    messages.sort((a, b) => getTimestamp(a.messageTimestamp) - getTimestamp(b.messageTimestamp));
 
     messages.forEach(msg => {
         const msgId = `msg-${msg.key.id}`;
         let div = document.getElementById(msgId);
 
-        // If message exists, just update reactions if changed (simplified: re-render or just skip for now, better to update)
-        // For now, simpler to skip if exists, but we want to show reactions if they arrive later. 
-        // Real-time updates for reactions would require updating the existing DOM element.
-        if (div) {
-            // Optional: Update reactions here if we had logic to detect changes.
-            // For now, let's just return to avoid re-rendering entire list.
-            return;
-        }
+        if (div) return;
 
         div = document.createElement('div');
         div.id = msgId;
@@ -147,65 +144,105 @@ function renderMessages(messages) {
 
         // Handle Quoted Message (ContextInfo)
         let quotedContent = '';
-        const contextInfo = m?.extendedTextMessage?.contextInfo || m?.imageMessage?.contextInfo || m?.videoMessage?.contextInfo;
+        // More robust contextInfo extraction
+        let contextInfo = null;
+        if (m) {
+            if (m.extendedTextMessage?.contextInfo) contextInfo = m.extendedTextMessage.contextInfo;
+            else if (m.imageMessage?.contextInfo) contextInfo = m.imageMessage.contextInfo;
+            else if (m.videoMessage?.contextInfo) contextInfo = m.videoMessage.contextInfo;
+            else if (m.audioMessage?.contextInfo) contextInfo = m.audioMessage.contextInfo;
+            else if (m.documentMessage?.contextInfo) contextInfo = m.documentMessage.contextInfo;
+            else {
+                // Fallback: search all keys
+                for (const key in m) {
+                    if (m[key]?.contextInfo) {
+                        contextInfo = m[key].contextInfo;
+                        break;
+                    }
+                }
+            }
+        }
+
         if (contextInfo && contextInfo.quotedMessage) {
             const qm = contextInfo.quotedMessage;
             let qText = '';
+            let qMedia = '';
+
             if (qm.conversation) qText = qm.conversation;
             else if (qm.extendedTextMessage?.text) qText = qm.extendedTextMessage.text;
-            else if (qm.imageMessage) qText = '📷 Photo';
-            else if (qm.videoMessage) qText = '🎥 Video';
+            else if (qm.imageMessage) {
+                qText = qm.imageMessage.caption || '📷 Photo';
+                if (qm.imageMessage.jpegThumbnail) {
+                    qMedia = `<img src="data:image/jpeg;base64,${qm.imageMessage.jpegThumbnail.toString('base64')}" style="max-width: 50px; border-radius: 4px; margin-left: 10px;">`;
+                }
+            }
+            else if (qm.videoMessage) qText = qm.videoMessage.caption || '🎥 Video';
+            else if (qm.audioMessage) qText = '🎵 Audio';
             else qText = '...';
 
-            // Participant naming could be improved by looking up contact
             const qParticipant = contextInfo.participant ? contextInfo.participant.split('@')[0] : 'Unknown';
-
             quotedContent = `
-                <div class="quoted-message">
-                    <div style="font-weight: bold; color: var(--accent);">${qParticipant}</div>
-                    <div>${qText}</div>
+                <div class="quoted-message" style="display: flex; justify-content: space-between; align-items: center;">
+                    <div style="flex: 1; overflow: hidden;">
+                        <div style="font-weight: bold; color: var(--accent); font-size: 0.8rem;">${qParticipant}</div>
+                        <div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-height: 40px;">${qText}</div>
+                    </div>
+                    ${qMedia}
                 </div>`;
         }
 
         if (m) {
-            // Helper to generate download URL
             const getUrl = () => `/api/chats/${msg.key.remoteJid}/messages/${msg.key.id}/download`;
 
             // Text
             if (m.conversation) content = m.conversation;
             else if (m.extendedTextMessage?.text) content = m.extendedTextMessage.text;
 
-            // Media
+            // Media - Auto-rendering for "play in thread"
             if (m.imageMessage) {
+                const url = getUrl();
                 content = `
-                    <div class="media-container placeholder" onclick="loadMedia(this, 'image', '${getUrl()}', '${m.imageMessage.caption ? m.imageMessage.caption.replace(/'/g, "\\'") : ''}')">
-                        <span>📷 Click to find image</span>
+                    <div class="media-container">
+                        <img src="${url}" class="loaded-media" onclick="window.open('${url}', '_blank')" loading="lazy">
                         <div class="caption">${m.imageMessage.caption || ''}</div>
                     </div>`;
             }
             else if (m.videoMessage) {
+                const url = getUrl();
                 content = `
-                    <div class="media-container placeholder" onclick="loadMedia(this, 'video', '${getUrl()}', '${m.videoMessage.caption ? m.videoMessage.caption.replace(/'/g, "\\'") : ''}')">
-                        <span>🎥 Click to load video</span>
+                    <div class="media-container">
+                        <video src="${url}" controls class="loaded-media" preload="metadata"></video>
                         <div class="caption">${m.videoMessage.caption || ''}</div>
                     </div>`;
             }
             else if (m.audioMessage) {
                 content = `
-                    <div class="media-container placeholder" onclick="loadMedia(this, 'audio', '${getUrl()}')">
-                        <span>🎵 Click to load audio</span>
+                    <div class="media-container">
+                        <audio src="${getUrl()}" controls preload="metadata"></audio>
                     </div>`;
             }
             else if (m.stickerMessage) {
                 content = `
-                    <div class="media-container placeholder" onclick="loadMedia(this, 'sticker', '${getUrl()}')">
-                        <span>💟 Click to load sticker</span>
+                    <div class="media-container">
+                        <img src="${getUrl()}" class="loaded-media" style="width:120px; height: auto;">
                     </div>`;
             }
-            // Fallback
+
+            // Fallback for types we don't handle explicitly
             if (!content && !m.conversation && !m.extendedTextMessage) {
-                content = `<i>Media/System Message ([${Object.keys(m).join(', ')}])</i>`;
+                const type = Object.keys(m).find(k => k !== 'contextInfo') || 'unknown';
+                content = `<div class="system-msg">Media/System Message ([${type}])</div>`;
             }
+        } else if (msg.messageStubType) {
+            // Handle System/Stub Messages
+            div.className = 'message system-stub';
+            senderName = '';
+            let stubText = msg.messageStubType;
+            if (msg.messageStubType === 'GROUP_PARTICIPANT_ADD') stubText = '👤 User Added';
+            else if (msg.messageStubType === 'GROUP_PARTICIPANT_REMOVE') stubText = '👤 User Removed';
+            else if (msg.messageStubType === 'GROUP_CHANGE_SUBJECT') stubText = '📝 Group Subject Changed';
+
+            content = `<div class="system-msg">${stubText}</div>`;
         }
 
         // Reactions (Simple retrieval if available in store/msg object - Note: Baileys store might handle reactions differently)
@@ -223,13 +260,9 @@ function renderMessages(messages) {
 
         // Time Validation
         let timeStr = '';
-        if (msg.messageTimestamp) {
-            let ts = msg.messageTimestamp;
-            if (typeof ts === 'object' && ts.low) ts = ts.low; // Handle Long object
-            ts = Number(ts) * 1000;
-            if (!isNaN(ts)) {
-                timeStr = new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            }
+        const ts = getTimestamp(msg.messageTimestamp);
+        if (ts > 0) {
+            timeStr = new Date(ts * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         }
 
         div.innerHTML = `
@@ -248,39 +281,37 @@ function renderMessages(messages) {
     }
 }
 
-// Global function for click handlers
-window.loadMedia = function (element, type, url, caption) {
-    element.onclick = null; // Remove handler
-    element.classList.remove('placeholder');
-    element.classList.add('loading');
-    element.innerHTML = '<span>⏳ Downloading...</span>';
+// Helper to determine fetch range and filtering for stats
+function getStatsConfig() {
+    const range = document.getElementById('stats-range').value;
+    let days = 1;
+    let filter = null;
 
-    // Create actual media element
-    let html = '';
-    if (type === 'image') {
-        html = `<img src="${url}" alt="Image" class="loaded-media" onclick="window.open('${url}', '_blank')">`;
-        if (caption && caption !== 'undefined' && caption !== '') html += `<div class="caption">${caption}</div>`;
-    } else if (type === 'video') {
-        html = `<video src="${url}" controls autoplay class="loaded-media"></video>`;
-        if (caption && caption !== 'undefined' && caption !== '') html += `<div class="caption">${caption}</div>`;
-    } else if (type === 'audio') {
-        html = `<audio src="${url}" controls autoplay></audio>`;
-    } else if (type === 'sticker') {
-        html = `<img src="${url}" alt="Sticker" style="width:100px;">`;
+    if (range === 'today') {
+        days = 1;
+    } else if (range === 'yesterday') {
+        days = 2;
+        filter = 'yesterday'; // We'll filter the result to show only the 2nd day (yesterday)
+    } else if (range === 'month') {
+        const now = new Date();
+        days = now.getDate();
+    } else {
+        days = parseInt(range) || 7;
     }
 
-    // Small delay to allow 'loading' text to be seen or just swap
-    setTimeout(() => {
-        element.innerHTML = html;
-        element.classList.remove('loading');
-    }, 500);
-};
+    return { days, filter };
+}
 
 window.publishStats = async function () {
     if (!state.currentChatId) return;
 
+    const { days, filter } = getStatsConfig();
+
     try {
-        const response = await fetch(`/api/groups/${state.currentChatId}/stats?days=2`);
+        let url = `/api/groups/${state.currentChatId}/stats?days=${days}`;
+        if (filter) url += `&filter=${filter}`;
+
+        const response = await fetch(url);
         const data = await response.json();
 
         if (!data.success) {
@@ -288,9 +319,9 @@ window.publishStats = async function () {
             return;
         }
 
-        const stats = data.stats;
+        let stats = data.stats;
         if (!stats || stats.length === 0) {
-            alert('No stats available for the last 2 days.');
+            alert('No stats available for the selected range.');
             return;
         }
 
@@ -349,8 +380,13 @@ window.closeStats = function () {
 window.confirmPublish = async function () {
     if (!state.currentChatId) return;
 
+    const { days, filter } = getStatsConfig();
+
     try {
-        const pubRes = await fetch(`/api/groups/${state.currentChatId}/stats/publish?days=2`, { method: 'POST' });
+        let url = `/api/groups/${state.currentChatId}/stats/publish?days=${days}`;
+        if (filter) url += `&filter=${filter}`;
+
+        const pubRes = await fetch(url, { method: 'POST' });
         const pubData = await pubRes.json();
 
         if (pubData.success) {
