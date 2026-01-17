@@ -3,3 +3,21 @@
  3. whoze the admin/evaluator .. only his replies count towards points
  4. stat preview total against Tasks . not against name 
 5. admin cannot post task completions.. 
+6. If from same phone number 2 kids post tasks .. they should be counted against 2 separate profiles
+7. Fix Applied: local patch
+I have patched the 
+node_modules/@whiskeysockets/baileys/lib/Utils/process-message.js
+ file to safely handle these malformed parameters. Instead of crashing, the code will now catch the error and ignore the invalid data.
+
+Specific changes:
+
+File: 
+node_modules/@whiskeysockets/baileys/lib/Utils/process-message.js
+Change: Wrapped JSON.parse(message.messageStubParameters) calls in a try/catch block to prevent crashes from bad data.
+
+
+====
+
+Features:
+1. read receipts and total no of views
+2. dictation and transcript view of voice note.
